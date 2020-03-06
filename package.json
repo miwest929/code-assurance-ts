@@ -23,10 +23,10 @@
     "bundle": "npm run build && pkg . --out-dir ./exec/"
   },
   "devDependencies": {
+    "commander": "^2.20.3",
     "ts-node": "^8.7.0",
-    "typescript": "^3.8.3"
+    "typescript": "^3.8.3",
+    "@types/node": "^13.9.0"
   },
-  "dependencies": {
-    "commander": "^2.20.0"
-  }
+  "dependencies": {}
 }
