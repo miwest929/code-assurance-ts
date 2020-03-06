@@ -11,13 +11,13 @@
   ],
   "license": "MIT",
   "main": "./dist/index.js",
-  "bin": "./dist/cli.js",
+  "bin": "./dist/assurance.js",
   "files": [
     "dist/**/*",
     "!dist/**/*.test.js"
   ],
   "scripts": {
-    "dev": "ts-node ./src/cli.ts",
+    "dev": "ts-node ./src/assurance.ts",
     "build": "npm run clean && tsc",
     "test": "npm run build && ava --verbose",
     "bundle": "npm run build && pkg . --out-dir ./exec/"
