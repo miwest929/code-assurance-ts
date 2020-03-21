@@ -26,6 +26,17 @@ function range(n: number): number[] {
     return [...Array(n).keys()];
 }
 
+
+class TestClass {
+    private msg: string;
+    constructor(m: string) {
+        this.msg = m;
+    }
+    public printMsg() {
+        console.log(this.msg);
+    }
+}
+
 type EmitFnType = (value: any) => Uint8Array;
 type DecodedDataType = { nextIndex: number, decodedItem: any };
 type ConsumeFnType = (data: Uint8Array, idx: number) => DecodedDataType;
