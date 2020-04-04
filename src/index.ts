@@ -2,15 +2,15 @@ import * as fs from "fs";
 import { parse, TSESTreeOptions } from "@typescript-eslint/typescript-estree";
 
 const options: TSESTreeOptions = {
-    comment: false,
-    jsx: false
+  comment: false,
+  jsx: false
 }
 
 const isTypeScriptSource = (filename: string): boolean => {
     return filename.endsWith('.ts');
 }
 
-const getTypescriptSourcesRecursive = (path: string): string[] => {
+const recursivelyGetTypescriptSources = (path: string): string[] => {
     const sourceFiles = [];
     fs.readdirSync(path).forEach(file => {
         if (isTypeScriptSource(file)) {
@@ -18,6 +18,43 @@ const getTypescriptSourcesRecursive = (path: string): string[] => {
         }
     });
     return sourceFiles;
+}
+
+abstract class NodeVisitor {
+  protected node: any;
+
+  constructor(node: any) {
+    this.node = node;
+  }
+
+  // Every node type requires specialized visiting logic.
+  // @return ABCMetric -> visit method will crawl its node's tree and return the computed ABCMetric
+  abstract visit(): ABCMetric;
+
+  getNode(): any {
+    return this.node;
+  }
+}
+
+class VariableDeclarationVisitor extends NodeVisitor {
+  constructor(node: any) {
+    super(node);
+  }
+
+  visit() {
+    for (const declare of this.node.declarations) {
+      console.log(declare.init[0]);
+    }
+    return new ABCMetric();
+  }
+}
+
+function createVisitorFrom(node: any): NodeVisitor {
+  if (node.type === "VariableDeclaration") {
+    return new VariableDeclarationVisitor(node);
+  } else {
+    throw `Unknown node type of ${node.type}. Failed to create visitor instance for it`;
+  }
 }
 
 /*
@@ -35,12 +72,44 @@ const getTypescriptSourcesRecursive = (path: string): string[] => {
 // Visitor pattern (double dispatch) and Intepreter pattern (recursive function)
 // See: https://stackoverflow.com/a/31130000
 
-interface ABCMetric {
+interface ABCMetricData {
   assignments: number;
   branches: number;
   conditionals: number;
 }
-type FunctionQualityMetric = Map<string, ABCMetric>;
+
+class ABCMetric {
+  private values: ABCMetricData;
+
+  constructor() {
+    this.values = this.emptyABCMetric();
+  }
+
+  combineWith(otherMetric: ABCMetric) {
+    this.values.assignments += otherMetric.values.assignments;
+    this.values.branches += otherMetric.values.branches;
+    this.values.conditionals += otherMetric.values.conditionals;
+  }
+
+  public assignments(): number {
+    return this.values.assignments;
+  }
+
+  public branches(): number {
+    return this.values.branches;
+  }
+
+  public conditionals(): number {
+    return this.values.conditionals;
+  }
+
+
+  private emptyABCMetric(): ABCMetricData {
+    return {assignments: 0, branches: 0, conditionals: 0}; 
+  }
+}
+
+//type FunctionQualityMetric = Map<string, ABCMetric>;
 
 class CodeQualityAnalyzer {
   private projectPath: string;
@@ -50,7 +119,7 @@ class CodeQualityAnalyzer {
   }
 
   public run() {
-      const sources = getTypescriptSourcesRecursive(this.projectPath);
+      const sources = recursivelyGetTypescriptSources(this.projectPath);
       console.log(`Will analyze the following Typescript source files: ${sources.join(', ')}`);
 
       for (const s of sources) {
@@ -79,44 +148,50 @@ class CodeQualityAnalyzer {
       return functions;
   }
 
-  private analyzeSingleFunction(functionNode: any): number[] {
-    if (!functionNode) {
-        return [0, 0, 0];
-    }
-    //console.log('---', functionNode, '-----');
-    let assignments = 0;
-    let branches = 0;
-    let conditionals = 0;
-    for (const node of functionNode.body) {
-        console.log(node);
-        if (node.type === "VariableDeclaration") {
-            assignments += 1;
-        } else if (node.type === "IfStatement") {
-            conditionals += 1;
-        }
+  private analyzeFunctionNode(nodeBody: any): ABCMetric {
+    let rollingMetric = new ABCMetric();
+
+    if (!nodeBody) {
+        return rollingMetric;
     }
 
-    return [assignments, branches, conditionals];
+    let nodeQueue: any[] = [nodeBody];
+    while (nodeQueue.length > 0) {
+      const node = nodeQueue.shift();
+      const visitor = createVisitorFrom(node);
+
+      if (visitor) {
+        rollingMetric.combineWith( visitor.visit() );
+      }
+      //console.log(node);
+      //console.log('------------------------------');
+    }
+
+    return rollingMetric;
   }
 
   // Returns ABC metrics for each discovered function
-  private analyzeSingleSource(source: string): Map<string, number[]> {
+  private analyzeSingleSource(source: string): Map<string, ABCMetric> {
     console.log(`Analyzing source '${source}'...`);
 
     const code = fs.readFileSync(`${this.projectPath}/${source}`).toString();
     const ast = this.getSourceFileAST(code);
     const functions = this.discoverFunctionsFromAST(ast);
 
-    const abcMetrices: Map<string, number[]> = new Map<string, number[]>();
-    for (const fn of functions) {
+    // abcMetrices: Map<string, number[]> -> key is the function name, value is 
+    const abcMetrices: Map<string, ABCMetric> = new Map<string, ABCMetric>();
+    //for (const fn of functions) {
+      const fn = functions[0];
         if (fn.type === "MethodDefinition") {
             const fnName = fn.key.name;
-            abcMetrices.set(fnName, this.analyzeSingleFunction(fn.value.body));
+            console.log(`Analyzing function ${fnName}`);
+            abcMetrices.set(fnName, this.analyzeFunctionNode(fn.value.body));
         } else if (fn.type === "FunctionDeclaration") {
             const fnName = fn.id.name;
-            abcMetrices.set(fnName, this.analyzeSingleFunction(fn.body));
+            console.log(`Analyzing function ${fnName}`);
+            abcMetrices.set(fnName, this.analyzeFunctionNode(fn.body));
         }
-    }
+    //}
 
     return abcMetrices;
   }
